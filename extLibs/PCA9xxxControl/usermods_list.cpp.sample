@@ -9,9 +9,7 @@
  * || || ||
  * \/ \/ \/
  */
-#ifdef USERMOD_PCX9XXX_CONTROL
-  #include "UsermodPCA9xxxControl.h"
-#endif
+#include "UsermodPCA9xxxControl.h"
 
 void registerUsermods()
 {
@@ -20,7 +18,5 @@ void registerUsermods()
    * || || ||
    * \/ \/ \/
    */
-  #ifdef USERMOD_PCX9XXX_CONTROL
-    usermods.add(new UsermodPCA9xxxControl());
-  #endif
+  usermods.add(new UsermodPCA9xxxControl());
 }
