@@ -1,0 +1,26 @@
+#include "wled.h"
+/*
+ * Register your v2 usermods here!
+ *   (for v1 usermods using just usermod.cpp, you can ignore this file)
+ */
+
+/*
+ * Add/uncomment your usermod filename here (and once more below)
+ * || || ||
+ * \/ \/ \/
+ */
+#ifdef USERMOD_PCX9XXX_CONTROL
+  #include "UsermodPCA9xxxControl.h"
+#endif
+
+void registerUsermods()
+{
+/*
+   * Add your usermod class name here
+   * || || ||
+   * \/ \/ \/
+   */
+  #ifdef USERMOD_PCX9XXX_CONTROL
+    usermods.add(new UsermodPCA9xxxControl());
+  #endif
+}

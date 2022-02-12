@@ -1,0 +1,6 @@
+[submodule "WLED"]
+	path = WLED
+	url = https://github.com/Aircoookie/WLED.git
+[submodule "extLibs/PCA9xxxPWM"]
+	path = extLibs/PCA9xxxPWM
+	url = https://github.com/kchinzei/PCA9xxxPWM.git
