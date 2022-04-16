@@ -24,10 +24,14 @@
 
 #pragma once
 
+#include<algorithm> // for std::max()
+
 #include "wled.h"
 #include <PCA9xxxPWMFactory.h>
 #include <PCA9xxxPWM.h>
 #include <Wire.h>
+
+#define WLED_DEBUG
 
 #define MAXDEVICE 4
 #define DEFAULT_PIN_OE 2
@@ -37,11 +41,14 @@ class UsermodPCA9xxxControl : public Usermod {
     PCA9xxxPWMFactory factory;
     PCA9xxxPWM *pwms[MAXDEVICE];
     uint8_t ndevice = 0;
-    int8_t pinOE = DEFAULT_PIN_OE;
-    bool activate[MAXDEVICE];
+    int8_t pinOE = -1;
+    bool enable[MAXDEVICE];
+    bool enablePrev[MAXDEVICE];
     bool exponential = false;
-
+    uint8_t briPrev = 0;
     unsigned long lastTime = 0;
+    byte prevCol[4] = {0,0,0,0};
+    uint8_t briRGBW = 0;
 
   public:
     /*
@@ -52,11 +59,10 @@ class UsermodPCA9xxxControl : public Usermod {
       // Serial.begin(115200);
       ndevice = factory.scanDevice(pwms, MAXDEVICE, true);
 
-      // Wire.setClock(400000);
-      Wire.setClock(100000);
-      // Setting OE pin handled by readFromConfig()
-      // pinMode(pinOE, OUTPUT);
-      // digitalWrite(pinOE, 0); // Low-active
+      Wire.setClock(400000);
+      for (int i = 0; i < MAXDEVICE; i++) {
+        enablePrev[i] = false;
+      }
     }
 
 
@@ -65,10 +71,26 @@ class UsermodPCA9xxxControl : public Usermod {
      * Use it to initialize network interfaces
      */
     void connected() {
-      // Serial.println("Connected to WiFi!");
+      DEBUG_PRINTLN(F("Connected to WiFi!"));
     }
 
+    void printglobal() {
+      DEBUG_PRINTF(F(" bri: "), bri);
+      DEBUG_PRINTF(F(" briOld: "),briOld);
+      DEBUG_PRINTF(F(" briS: "), briS);
+      DEBUG_PRINTF(F(" col: [%d %d %d]"), col[0], col[1], col[2]);
+      DEBUG_PRINTF(F(" briT: "), briT);
+      DEBUG_PRINTF(F(" briIT: "), briIT);
+      DEBUG_PRINTF(F(" briLast: "), briLast);
+    }
 
+    void printreg(PCA9xxxPWM *pwm) {
+      uint8_t mode1 = pwm->read(0x00);
+      uint8_t mode2 = pwm->read(0x01);
+      DEBUG_PRINTF(F(" Addr: 0x%x"), pwm->get_i2cAddr());
+      DEBUG_PRINTF(F(" MODE1 = 0x%x"), mode1);
+      DEBUG_PRINTF(F(" MODE2 = 0x%x"), mode2);
+    }
     /*
      * loop() is called continuously. Here you can check for events, read sensors, etc.
      * 
@@ -78,31 +100,49 @@ class UsermodPCA9xxxControl : public Usermod {
      * 
      * 2. Try to avoid using the delay() function. NEVER use delays longer than 10 milliseconds.
      *    Instead, use a timer check as shown here.
+     * 
+     * 3. https://kno.wled.ge/advanced/custom-features/
      */
 
     #define PCA9XXX_MAXVAL 1.0
 
     void loop() {
-      float val = PCA9XXX_MAXVAL * bri / 255;
-      // float val = 1.0 * briS / 255;
-      if (val > 1.0) val = 1.0;
-      if (val < 0.0001) val = 0;
+      float val = PCA9XXX_MAXVAL * briT / 255;
+      // bool colChanged = (col[0] != prevCol[0]) || (col[1] != prevCol[1]) || (col[2] != prevCol[2]) || (col[3] != prevCol[3]);
+      briRGBW = std::max({col[0], col[1], col[2]}) + col[3];
+      for (int i = 0; i < ndevice; i++) {
+        if (briT != briPrev || enable[i] != enablePrev[i]) {
+          float v = val * enable[i];
+          if (v > 1.0) v = 1.0;
+          if (v < 0.005) v = 0;
+          PCA9xxxPWM *pwm = pwms[i];
+          int n_of_ports = pwm->number_of_ports();
+          for (int j = 0; j < n_of_ports; j++) {
+            pwm->pwm(j, v);
+          }
+        }
+        enablePrev[i] = enable[i];
+      }
+      briPrev = briT;
 
       unsigned long timer = millis() - lastTime;
-      if (timer > 100) {
+      if (timer > 500) {
         lastTime = millis();
         ndevice = factory.scanDevice(pwms, MAXDEVICE);
         for (int i = 0; i < ndevice; i++) {
           PCA9xxxPWM *pwm = pwms[i];
           if (!pwm->hasBegun()) {
             initializePWM(pwm);
-          } else {
-            int n_of_ports = pwm->number_of_ports();
-            for (int j = 0; j < n_of_ports; j++) {
-              pwm->pwm(j, val * activate[i]);
-            }
+            enablePrev[i] = 0; // This ensures turning on again when connected.
           }
         }
+        /*
+        for (int i = 0; i < ndevice; i++) {
+          printreg(pwms[i]);
+        }
+        Serial.println("");
+        */
+        printglobal();
       }
     }
 
@@ -110,7 +150,7 @@ class UsermodPCA9xxxControl : public Usermod {
 #define PCA9xxx_OE_KEY "Output Enable"
 #define PCA9xxx_EXPONENTIAL "Exponential brightness"
 #define PCA9xxx_DEVICE_KEY "Device %d"
-#define PCA9xxx_ACTIVATE "Activate"
+#define PCA9xxx_ENABLE "Enable"
 #define PCA9xxx_ADDR "Addr"
 #define PCA9xxx_TYPE "Type"
 
@@ -126,7 +166,7 @@ class UsermodPCA9xxxControl : public Usermod {
         char buf[32];
         sprintf(buf, PCA9xxx_DEVICE_KEY, i);
         JsonObject device = top.createNestedObject(buf);
-        device[PCA9xxx_ACTIVATE] = activate[i];
+        device[PCA9xxx_ENABLE] = enable[i];
         if (i < ndevice) {
           sprintf(buf, "0x%x", pwms[i]->get_i2cAddr());
           device[PCA9xxx_ADDR] = buf;
@@ -162,7 +202,7 @@ class UsermodPCA9xxxControl : public Usermod {
         sprintf(buf, PCA9xxx_DEVICE_KEY, i);
         JsonObject device = top[buf];
         configComplete &= !device.isNull();
-        configComplete &= getJsonValue(device[PCA9xxx_ACTIVATE], activate[i], 0);
+        configComplete &= getJsonValue(device[PCA9xxx_ENABLE], enable[i], 1);
       }
       return configComplete;
     }
@@ -190,12 +230,14 @@ class UsermodPCA9xxxControl : public Usermod {
 
     void setOE(int8_t newPinOE) {
       if (pinOE != newPinOE) {
-        pinMode(pinOE, INPUT_PULLUP);
+        if (pinOE >= 0) {
+          pinMode(pinOE, INPUT_PULLUP);
+        }
         pinOE = newPinOE;
-      }
-      if (pinOE >= 0) {
-        pinMode(pinOE, OUTPUT);
-        digitalWrite(pinOE, 0); // Low-active
+        if (newPinOE >= 0) {
+          pinMode(pinOE, OUTPUT);
+          digitalWrite(pinOE, 0); // Low-active
+        }
       }
     }
 };
