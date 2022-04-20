@@ -56,7 +56,7 @@ class UsermodPCA9xxxControl : public Usermod {
      * You can use it to initialize variables, sensors or similar.
      */
     void setup() {
-      // Serial.begin(115200);
+      Serial.begin(115200);
       ndevice = factory.scanDevice(pwms, MAXDEVICE, true);
 
       Wire.setClock(400000);
@@ -91,6 +91,16 @@ class UsermodPCA9xxxControl : public Usermod {
       DEBUG_PRINTF(F(" MODE1 = 0x%x"), mode1);
       DEBUG_PRINTF(F(" MODE2 = 0x%x"), mode2);
     }
+
+    void printpwm(PCA9xxxPWM *pwm, uint8_t ch = 0) {
+      const String name = pwm->type_name();
+      if (name == "PCA9955APWM") {
+        DEBUG_PRINTF(F(" pwm = %.2f current = %.2f", pwm->pwm(ch), pwm->current(ch)));
+      } else {
+        DEBUG_PRINTF(F(" pwm = %.2f", pwm->pwm(ch)));
+      }
+    }
+    
     /*
      * loop() is called continuously. Here you can check for events, read sensors, etc.
      * 
@@ -136,12 +146,13 @@ class UsermodPCA9xxxControl : public Usermod {
             enablePrev[i] = 0; // This ensures turning on again when connected.
           }
         }
-        /*
+        
         for (int i = 0; i < ndevice; i++) {
           printreg(pwms[i]);
+          printpwm(pwms[i], 0);
         }
         Serial.println("");
-        */
+        
         printglobal();
       }
     }
